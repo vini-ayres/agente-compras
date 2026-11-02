@@ -1,166 +1,132 @@
-# Purchase Agent
+# Agente de Compras
 
 [![CI](https://github.com/vini-ayres/agente-compras/actions/workflows/ci.yml/badge.svg)](https://github.com/vini-ayres/agente-compras/actions/workflows/ci.yml)
 
-Agente de compras: o usuário descreve o pedido em português no chat, o backend interpreta a solicitação com um LLM, consulta o catálogo DummyJSON via MCP e grava uma requisição no PostgreSQL.
+Aplicação de compras em que o usuário descreve o que precisa em um chat. Um agente de IA consulta o catálogo de produtos, seleciona as opções adequadas e registra a requisição no banco de dados.
 
-## Arquitetura
+## Tecnologias
 
-| Componente | Tecnologia | Função |
-|---|---|---|
-| Chat | React + Vite | Formulário de pedido e histórico |
-| API | FastAPI + SQLAlchemy | Orquestra o agente, valida o catálogo e persiste |
-| Agente | Google ADK + LiteLLM | Interpreta o pedido e escolhe produtos |
-| Catálogo | MCP Server (Streamable HTTP) | Expõe DummyJSON como ferramentas |
-| Banco | PostgreSQL | Requisições, itens e chaves de idempotência |
+- **Frontend:** React e Vite
+- **Backend:** Python e FastAPI
+- **Agente:** Google ADK e LiteLLM
+- **Integração:** MCP (Model Context Protocol)
+- **Banco de dados:** PostgreSQL
+- **Ambiente:** Docker Compose
 
-O LLM decide quando chamar as ferramentas. Não há sequência fixa de `buscar_produtos` / `detalhar_produto`. Depois da escolha, o backend:
+## Como executar
 
-1. Aceita apenas IDs que apareceram em `buscar_produtos` na mesma execução.
-2. Recalcula título, preço, subtotal e total com `detalhar_produto` e `Decimal`.
-3. Persiste um resumo factual gerado no backend, sem prosa comercial do modelo.
+É necessário ter Docker Desktop e uma chave de API de um dos provedores suportados.
 
-## MCP Server
-
-Ferramentas:
-
-- `buscar_produtos(termo)` — pesquisa no DummyJSON.
-- `detalhar_produto(id)` — detalhe de um produto, incluindo preço.
-
-Transporte: Streamable HTTP em `/mcp`. Health: `GET /health`.
-
-## Modelo LLM
-
-O agente usa Google ADK + LiteLLM. O provedor é selecionado por `LLM_PROVIDER` no `.env`, sem alterar o código.
-
-- `LLM_PROVIDER=gemini`: `GEMINI_API_KEY` + `GEMINI_MODEL` (padrão `gemini/gemini-3.6-flash`)
-- `LLM_PROVIDER=openrouter`: `OPENROUTER_API_KEY` + `OPENROUTER_MODEL` (padrão `openrouter/google/gemini-3.6-flash`)
-- Não há fallback automático entre chaves ou modelos dos dois provedores
-- Function calling, structured outputs e tarefas agênticas
-- O ADK instancia `LiteLlm`; o modelo decide quando chamar `buscar_produtos` e `detalhar_produto`
-- `output_schema` (`AgentStructuredOutput`) permanece; no Gemini (direto ou via OpenRouter) o ADK aplica o workaround `set_model_response` para combinar schema e tools
-- `LLM_MAX_OUTPUT_TOKENS` (padrão 4096) é enviado ao LiteLLM como `max_tokens`/`max_completion_tokens` para evitar a reserva de 65536 no OpenRouter
-
-## Variáveis de ambiente
-
-Copie `.env.example` para `.env` e preencha os valores reais. O exemplo contém apenas placeholders (`POSTGRES_PASSWORD=change-me`, chaves de API vazias).
-
-Principais variáveis:
-
-- `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`
-- `DATABASE_URL` (no Docker o Compose redefine o host para o serviço `postgres`)
-- `LLM_PROVIDER` (`gemini` ou `openrouter`)
-- `GEMINI_API_KEY`, `GEMINI_MODEL`
-- `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`
-- `LLM_MAX_OUTPUT_TOKENS`
-- `CORS_ORIGINS`
-- `MCP_SERVER_URL` (no Docker: `http://mcp-server:8080/mcp`)
-- `DUMMYJSON_BASE_URL`, `HTTP_TIMEOUT_SECONDS`
-
-## Como subir
+1. Clone o repositório e entre na pasta do projeto.
+2. Crie o arquivo de configuração:
 
 ```powershell
 copy .env.example .env
-# preencha POSTGRES_PASSWORD e a chave do provedor escolhido (GEMINI_API_KEY ou OPENROUTER_API_KEY)
+```
+
+3. No `.env`, configure a senha do PostgreSQL e a chave do provedor de IA escolhido.
+
+Para usar OpenRouter:
+
+```env
+LLM_PROVIDER=openrouter
+GEMINI_API_KEY=sua-chave
+```
+
+Ou Gemini:
+
+```env
+LLM_PROVIDER=gemini
+OPENROUTER_API_KEY=sua-chave
+```
+
+4. Inicie os serviços:
+
+```powershell
 docker compose up -d --build
 ```
 
-- Chat: http://localhost:5173
-- API: http://localhost:8000/health
-- MCP: apenas na rede Docker (`http://mcp-server:8080`); a porta 8080 não é publicada no host
+A aplicação estará disponível em:
+
+- **Chat:** http://localhost:5173
+- **API:** http://localhost:8000
+- **Saúde da API:** http://localhost:8000/health
+
+O Docker Compose inicia o banco, o servidor MCP, a API e o frontend. As tabelas são criadas automaticamente na inicialização.
+
+## Como funciona
+
+O usuário envia uma solicitação pelo chat. O Google ADK executa o agente e permite que o modelo escolha quais ferramentas MCP utilizar para consultar o catálogo DummyJSON.
+
+O servidor MCP disponibiliza duas ferramentas:
+
+- `buscar_produtos(termo)`: pesquisa produtos pelo nome ou descrição.
+- `detalhar_produto(id)`: consulta os dados de um produto específico.
+
+Depois que o agente seleciona os produtos, o backend consulta novamente os detalhes no catálogo. Essa etapa é independente do agente e serve para conferir os dados antes de salvar a requisição.
+
+Os valores são calculados no backend com `Decimal`, evitando depender dos preços ou totais informados pelo modelo. Somente produtos encontrados na busca da execução atual podem ser utilizados.
+
+## Decisões técnicas
+
+- **O modelo escolhe as ferramentas:** não existe uma sequência fixa de chamadas MCP no código. O agente decide quando precisa pesquisar ou consultar um produto.
+- **Validação fora do LLM:** o backend revalida os produtos e calcula os valores antes da persistência. Assim, o modelo não controla diretamente os preços registrados.
+- **Separação entre agente e integração:** o servidor MCP é um serviço independente, acessível pela rede interna do Docker.
+- **Idempotência:** a API aceita o cabeçalho `Idempotency-Key` para evitar a criação duplicada de uma requisição quando a mesma operação é reenviada.
+- **Rastreabilidade:** a resposta da API informa as ferramentas executadas pelo agente e as chamadas realizadas pelo backend, identificando suas respectivas origens.
 
 ## API
 
-`POST /requisicoes` com `{"pedido": "Preciso de 3 laptops até US$ 2000 cada."}`
+| Método | Endpoint | Descrição |
+|---|---|---|
+| POST | `/requisicoes` | Processa um pedido e cria uma requisição |
+| GET | `/requisicoes` | Lista as requisições registradas |
 
-- 201: requisição criada
-- 200: replay de idempotência (mesma chave e mesmo pedido)
-- 409: `Idempotency-Key` já usada com outro pedido
-- 422: pedido inválido, sem produtos, informação insuficiente ou produto fora da busca
-- 503: catálogo, agente ou persistência indisponíveis
+Exemplo de solicitação:
 
-Cabeçalho opcional `Idempotency-Key`: a mesma chave com o mesmo `pedido` devolve a requisição original; a mesma chave com outro `pedido` retorna HTTP 409. Sem o cabeçalho, cada chamada cria uma nova requisição. O chat gera um UUID por envio (não pelo texto) e reutiliza a chave só no retry de falha de rede da mesma operação.
+```json
+{
+  "pedido": "Preciso de 3 laptops até US$ 2000 cada."
+}
+```
 
-`GET /requisicoes?limit=20&offset=0` lista as requisições mais recentes (`limit` 1–100).
-
-O backend valida os itens no catálogo, grava um resumo factual (nome, quantidade, preços e total) e ignora afirmações comerciais do texto do LLM. Erros de `no_products`, `insufficient_info` e `catalog_unavailable` devolvem mensagens controladas pelo backend.
+A API retorna os dados da requisição, os produtos selecionados, os valores calculados e as etapas de execução.
 
 ## Testes
 
+O projeto possui testes automatizados para o backend, servidor MCP e frontend.
+
+Para executar a suíte do backend:
+
 ```powershell
 cd backend
 python -m pytest -q
+```
 
+Para o servidor MCP:
+
+```powershell
 cd ..\mcp-server
 python -m pytest -q
+```
 
+Para o frontend:
+
+```powershell
 cd ..\frontend
 npm ci
 npm test
 npm run build
 ```
 
-## Integração contínua (CI)
+Também existe uma avaliação determinística com cinco cenários, cobrindo compra válida, produto não encontrado, pedido ambíguo, falha no catálogo e produto fora da busca.
 
-A pipeline em `.github/workflows/ci.yml` roda em todo push e em todo pull request para `main`. Os três jobs (`backend`, `mcp-server`, `frontend`) são independentes; falha de lint, testes ou build reprova o job.
-
-A CI **não** usa chaves de API, **não** chama LLM, **não** acessa DummyJSON e **não** depende de PostgreSQL externo. A avaliação determinística dos cinco cenários entra no job do backend com os mesmos mocks da suíte local.
-
-| Job | Ferramentas | O que verifica |
-|---|---|---|
-| Backend | Python 3.12, Ruff, Pytest | Lint, testes unitários/de API e `evaluate_agent.py` |
-| MCP Server | Python 3.12, Ruff, Pytest | Lint e testes do servidor de catálogo |
-| Frontend | Node.js 22, ESLint, Vitest, Vite | Lint, testes e build de produção |
-
-Ruff cobre pycodestyle (`E`/`W`) e Pyflakes (`F`), sem `--fix`. ESLint usa as regras recomendadas de JavaScript/TypeScript e os hooks clássicos do React (`rules-of-hooks`, `exhaustive-deps`).
-
-Para reproduzir a CI localmente:
-
-```powershell
-# Backend
-cd backend
-pip install -r requirements.txt
-pip install ruff
-ruff check .
-python -m pytest -q
-python scripts/evaluate_agent.py
-
-# MCP Server
-cd ..\mcp-server
-pip install -e ".[dev]"
-ruff check .
-python -m pytest -q
-
-# Frontend
-cd ..\frontend
-npm ci
-npm run lint
-npm test
-npm run build
-```
-
-## Avaliação funcional do agente
-
-A avaliação é uma suíte de **regressão determinística** do backend e das regras do agente. Ela **não** chama LLM, **não** usa API key, **não** acessa DummyJSON na internet e **não** mede a qualidade das respostas de um modelo real.
-
-Cada um dos cinco cenários vale 20 pontos (20 se todos os critérios passarem, 0 se algum falhar). Aprovação geral exige 100/100.
-
-| Cenário | Prompt | Esperado |
-|---|---|---|
-| Compra válida | Preciso de 3 laptops até US$ 2.000 cada. | Item da busca, quantidade 3, unitário ≤ 2000, total correto, persistido |
-| Nenhum produto encontrado | Preciso comprar um reator nuclear portátil. | Sem invenção, mensagem controlada, nada persistido |
-| Solicitação ambígua | Preciso comprar alguns equipamentos para meu escritório. | Pede mais informação, não persiste |
-| Falha no catálogo | Preciso de 2 notebooks. | Erro amigável de catálogo, nada persistido |
-| Produto fora da busca | Preciso de 2 notebooks. | ID existente no catálogo mas ausente na busca é rejeitado |
-
-Na raiz do repositório:
+Na raiz do projeto, execute:
 
 ```powershell
 python backend/scripts/evaluate_agent.py
 ```
 
-O processo termina com código diferente de zero se algum cenário for reprovado. O relatório lista o esperado, o obtido, o status e os critérios que falharam.
+A avaliação não utiliza chamadas reais ao LLM ou ao DummyJSON.
 
-## Uso de inteligência artificial no desenvolvimento
-
-O projeto foi desenvolvido com assistência de um agente de programação no Cursor. Arquitetura, contratos, testes e o conteúdo deste repositório foram revisados no código real antes de cada commit.
+A integração contínua, configurada no GitHub Actions, executa lint, testes e build a cada push e pull request para `main`.
