@@ -1,0 +1,1 @@
+"""Purchase Agent backend application."""
