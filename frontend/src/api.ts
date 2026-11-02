@@ -15,6 +15,7 @@ export type Requisicao = {
   itens: RequisicaoItem[];
   valor_total: string;
   created_at: string;
+  ferramentas_utilizadas?: string[];
 };
 
 export type RequisicaoListResponse = {

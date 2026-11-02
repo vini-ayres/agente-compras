@@ -101,3 +101,32 @@ td {
   display: grid;
   gap: 8px;
 }
+
+.tool-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  margin: 8px 0 12px;
+  padding: 0;
+}
+
+.tool-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #eef4fb;
+  border: 1px solid #d7e1ee;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.85rem;
+}
+
+.tool-name {
+  font-family: ui-monospace, Consolas, monospace;
+  color: #102033;
+}
+
+.tool-state {
+  color: #2f6f4e;
+}

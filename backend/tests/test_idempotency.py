@@ -59,8 +59,11 @@ def test_idempotency_replay_same_payload(client) -> None:
     assert first.status_code == 201
     assert second.status_code == 200
     assert first.json()["id"] == second.json()["id"]
+    assert first.json()["ferramentas_utilizadas"] == ["buscar_produtos", "detalhar_produto"]
+    assert second.json()["ferramentas_utilizadas"] == []
     listed = client.get("/requisicoes")
     assert listed.json()["total"] == 1
+    assert listed.json()["items"][0]["ferramentas_utilizadas"] == []
 
 
 def test_idempotency_same_key_different_payload(client) -> None:

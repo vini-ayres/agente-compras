@@ -36,6 +36,24 @@ def test_agent_structured_output_non_success_rejects_items() -> None:
         )
 
 
+def test_requisicao_out_defaults_ferramentas_utilizadas() -> None:
+    from datetime import datetime, timezone
+
+    from app.schemas.requisicao import RequisicaoOut
+
+    payload = RequisicaoOut(
+        id=1,
+        pedido_original="pedido",
+        resposta_agente="resumo",
+        itens=[],
+        valor_total="10.00",
+        created_at=datetime.now(timezone.utc),
+    )
+    assert payload.ferramentas_utilizadas == []
+    dumped = payload.model_dump()
+    assert dumped["ferramentas_utilizadas"] == []
+
+
 def test_agent_item_quantity_has_upper_bound() -> None:
     from app.schemas.requisicao import AgentItemSelection
 

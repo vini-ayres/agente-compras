@@ -120,7 +120,11 @@ def ensure_items_were_searched(
         )
 
 
-def _to_requisicao_out(model: Requisicao) -> RequisicaoOut:
+def _to_requisicao_out(
+    model: Requisicao,
+    *,
+    ferramentas_utilizadas: list[str] | None = None,
+) -> RequisicaoOut:
     return RequisicaoOut(
         id=model.id,
         pedido_original=model.pedido_original,
@@ -137,6 +141,7 @@ def _to_requisicao_out(model: Requisicao) -> RequisicaoOut:
             )
             for item in model.itens
         ],
+        ferramentas_utilizadas=list(ferramentas_utilizadas or ()),
     )
 
 
@@ -230,7 +235,13 @@ class RequisicaoService:
             logger.exception("Erro ao persistir requisição")
             raise PersistenceError("Não foi possível salvar a requisição.") from exc
 
-        return CreateRequisicaoResult(_to_requisicao_out(saved), created=True)
+        return CreateRequisicaoResult(
+            _to_requisicao_out(
+                saved,
+                ferramentas_utilizadas=list(run.ferramentas_utilizadas),
+            ),
+            created=True,
+        )
 
     def _replay_if_completed(self, key: str, request_hash: str) -> RequisicaoOut | None:
         record = self._repo.get_idempotency(key)

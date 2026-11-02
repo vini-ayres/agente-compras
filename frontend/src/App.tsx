@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { createIdempotencyKey, criarRequisicao, listarRequisicoes, type Requisicao } from "./api";
+import { FerramentasUtilizadas } from "./FerramentasUtilizadas";
 
 export default function App() {
   const [pedido, setPedido] = useState("Preciso de 3 laptops até US$ 2000 cada.");
@@ -95,6 +96,7 @@ function RequisicaoCard({ titulo, requisicao }: { titulo: string; requisicao: Re
         <strong>Pedido:</strong> {requisicao.pedido_original}
       </p>
       <p>{requisicao.resposta_agente}</p>
+      <FerramentasUtilizadas nomes={requisicao.ferramentas_utilizadas} />
       {requisicao.itens.length > 0 ? (
         <table>
           <thead>

@@ -46,6 +46,7 @@ class RequisicaoOut(BaseModel):
     itens: list[RequisicaoItemOut]
     valor_total: str
     created_at: datetime
+    ferramentas_utilizadas: list[str] = Field(default_factory=list)
 
 
 class RequisicaoListResponse(BaseModel):

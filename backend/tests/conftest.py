@@ -83,6 +83,7 @@ def mock_agent_runtime() -> MagicMock:
             raw_text="{}",
             search_product_ids=frozenset({1, 7}),
             search_observed=True,
+            ferramentas_utilizadas=["buscar_produtos", "detalhar_produto"],
         )
     )
     runtime.close = AsyncMock()

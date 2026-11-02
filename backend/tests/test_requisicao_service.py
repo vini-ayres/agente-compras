@@ -84,6 +84,7 @@ async def test_criar_requisicao_success(db_session: Session, mock_agent_runtime:
     assert result.requisicao.valor_total == "2999.97"
     assert len(result.requisicao.itens) == 1
     assert result.requisicao.itens[0].subtotal == "2999.97"
+    assert result.requisicao.ferramentas_utilizadas == ["buscar_produtos", "detalhar_produto"]
 
 
 @pytest.mark.asyncio

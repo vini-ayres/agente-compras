@@ -40,6 +40,7 @@ def test_post_requisicao_success(client) -> None:
     assert body["valor_total"] == "2999.97"
     assert body["itens"][0]["produto_id"] == 7
     assert body["itens"][0]["subtotal"] == "2999.97"
+    assert body["ferramentas_utilizadas"] == ["buscar_produtos", "detalhar_produto"]
 
 
 def test_get_requisicoes_pagination(client) -> None:
@@ -217,3 +218,41 @@ def test_post_agent_catalog_unavailable_returns_controlled_message(
     assert "IntegrityError" not in response.json()["detail"]
     assert "postgres" not in response.json()["detail"]
     assert client.get("/requisicoes").json()["total"] == 0
+
+
+def test_post_serializes_empty_ferramentas_when_agent_used_none(
+    client, mock_agent_runtime
+) -> None:
+    from app.agent.runner_factory import AgentRunResult
+    from app.schemas.requisicao import AgentItemSelection, AgentStructuredOutput
+
+    mock_agent_runtime.run_pedido = AsyncMock(
+        return_value=AgentRunResult(
+            structured=AgentStructuredOutput(
+                status="success",
+                resposta_agente="ok",
+                itens=[AgentItemSelection(produto_id=7, titulo="Laptop", quantidade=1)],
+            ),
+            raw_text="{}",
+            search_product_ids=frozenset({7}),
+            search_observed=True,
+            ferramentas_utilizadas=[],
+        )
+    )
+    with patch(
+        "app.services.requisicao_service.validate_and_price_items",
+        new=AsyncMock(
+            return_value=[
+                ValidatedLineItem(
+                    produto_id=7,
+                    titulo="Laptop",
+                    quantidade=1,
+                    preco_unitario=Decimal("10.00"),
+                    subtotal=Decimal("10.00"),
+                )
+            ]
+        ),
+    ):
+        response = client.post("/requisicoes", json={"pedido": "Preciso de notebooks"})
+    assert response.status_code == 201
+    assert response.json()["ferramentas_utilizadas"] == []
