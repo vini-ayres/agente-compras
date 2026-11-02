@@ -26,18 +26,18 @@ copy .env.example .env
 
 3. No `.env`, configure a senha do PostgreSQL e a chave do provedor de IA escolhido.
 
-Para usar OpenRouter:
-
-```env
-LLM_PROVIDER=openrouter
-OPENROUTER_API_KEY=sua-chave
-```
-
-Ou Gemini:
+Para usar Gemini:
 
 ```env
 LLM_PROVIDER=gemini
 GEMINI_API_KEY=sua-chave
+```
+
+Ou OpenRouter:
+
+```env
+LLM_PROVIDER=openrouter
+OPENROUTER_API_KEY=sua-chave
 ```
 
 4. Inicie os serviços:
@@ -130,3 +130,7 @@ python backend/scripts/evaluate_agent.py
 A avaliação não utiliza chamadas reais ao LLM ou ao DummyJSON.
 
 A integração contínua, configurada no GitHub Actions, executa lint, testes e build a cada push e pull request para `main`.
+
+## Uso de inteligência artificial
+
+O desenvolvimento contou com assistência do Cursor e do ChatGPT na implementação, revisão e elaboração de testes. As alterações foram verificadas no código e validadas por meio dos testes automatizados e da execução local.
