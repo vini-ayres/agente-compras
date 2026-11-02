@@ -1,12 +1,56 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { createIdempotencyKey, criarRequisicao, listarRequisicoes, type Requisicao } from "./api";
-import { FerramentasUtilizadas } from "./FerramentasUtilizadas";
+import { EtapasExecucao } from "./EtapasExecucao";
+import { ProcessandoSolicitacao } from "./ProcessandoSolicitacao";
+
+export function envioBloqueado(enviando: boolean, pedido: string): boolean {
+  return enviando || pedido.trim().length < 3;
+}
+
+export function AreaConversacao({
+  enviando,
+  erro,
+  atual,
+  pedidoEnviado,
+}: {
+  enviando: boolean;
+  erro: string | null;
+  atual: Requisicao | null;
+  pedidoEnviado: string | null;
+}) {
+  if (!enviando && !erro && !atual && !pedidoEnviado) {
+    return null;
+  }
+
+  return (
+    <section className="conversation" aria-live="polite">
+      {pedidoEnviado ? (
+        <article className="card chat-user">
+          <h3>Seu pedido</h3>
+          <p>{pedidoEnviado}</p>
+        </article>
+      ) : null}
+      {enviando ? <ProcessandoSolicitacao /> : null}
+      {erro && !enviando ? (
+        <p className="error" role="alert">
+          {erro}
+        </p>
+      ) : null}
+      {atual && !enviando ? (
+        <div className="result-enter">
+          <RequisicaoCard titulo="Resultado" requisicao={atual} />
+        </div>
+      ) : null}
+    </section>
+  );
+}
 
 export default function App() {
   const [pedido, setPedido] = useState("Preciso de 3 laptops até US$ 2000 cada.");
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [atual, setAtual] = useState<Requisicao | null>(null);
+  const [pedidoEnviado, setPedidoEnviado] = useState<string | null>(null);
   const [historico, setHistorico] = useState<Requisicao[]>([]);
   const operacaoKeyRef = useRef<string | null>(null);
 
@@ -26,12 +70,15 @@ export default function App() {
     if (operacaoKeyRef.current !== null) {
       return;
     }
+    const texto = pedido.trim();
     const idempotencyKey = createIdempotencyKey();
     operacaoKeyRef.current = idempotencyKey;
+    setPedidoEnviado(texto);
+    setAtual(null);
     setErro(null);
     setEnviando(true);
     try {
-      const criada = await criarRequisicao(pedido, idempotencyKey);
+      const criada = await criarRequisicao(texto, idempotencyKey);
       setAtual(criada);
       await carregarHistorico();
     } catch (err: unknown) {
@@ -62,15 +109,19 @@ export default function App() {
           minLength={3}
           required
           rows={4}
+          disabled={enviando}
         />
-        <button type="submit" disabled={enviando || pedido.trim().length < 3}>
-          {enviando ? "Consultando catálogo…" : "Enviar pedido"}
+        <button type="submit" disabled={envioBloqueado(enviando, pedido)} aria-busy={enviando}>
+          {enviando ? "Enviando…" : "Enviar pedido"}
         </button>
       </form>
 
-      {erro ? <p className="error" role="alert">{erro}</p> : null}
-
-      {atual ? <RequisicaoCard titulo="Resultado" requisicao={atual} /> : null}
+      <AreaConversacao
+        enviando={enviando}
+        erro={erro}
+        atual={atual}
+        pedidoEnviado={pedidoEnviado}
+      />
 
       <section>
         <h2>Requisições recentes</h2>
@@ -96,7 +147,7 @@ function RequisicaoCard({ titulo, requisicao }: { titulo: string; requisicao: Re
         <strong>Pedido:</strong> {requisicao.pedido_original}
       </p>
       <p>{requisicao.resposta_agente}</p>
-      <FerramentasUtilizadas nomes={requisicao.ferramentas_utilizadas} />
+      <EtapasExecucao etapas={requisicao.ferramentas_utilizadas} />
       {requisicao.itens.length > 0 ? (
         <table>
           <thead>

@@ -54,6 +54,19 @@ def test_requisicao_out_defaults_ferramentas_utilizadas() -> None:
     assert dumped["ferramentas_utilizadas"] == []
 
 
+def test_ferramenta_execucao_requires_origem_and_status() -> None:
+    from app.schemas.requisicao import FerramentaExecucao
+
+    item = FerramentaExecucao(nome="buscar_produtos", origem="agent", status="success")
+    assert item.model_dump() == {
+        "nome": "buscar_produtos",
+        "origem": "agent",
+        "status": "success",
+    }
+    with pytest.raises(ValidationError):
+        FerramentaExecucao(nome="buscar_produtos", origem="llm", status="success")
+
+
 def test_agent_item_quantity_has_upper_bound() -> None:
     from app.schemas.requisicao import AgentItemSelection
 

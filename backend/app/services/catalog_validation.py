@@ -5,13 +5,18 @@ from __future__ import annotations
 import json
 import logging
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 from mcp.client.session import ClientSession
 from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
 
-from app.schemas.requisicao import MAX_ITEM_QUANTITY, AgentItemSelection, ValidatedLineItem
+from app.schemas.requisicao import (
+    MAX_ITEM_QUANTITY,
+    AgentItemSelection,
+    FerramentaExecucao,
+    ValidatedLineItem,
+)
 from app.services.pricing import decimal_from_catalog, line_subtotal
 
 logger = logging.getLogger(__name__)
@@ -200,10 +205,29 @@ def _map_tool_payload(payload: dict[str, Any], product_id: int) -> dict[str, Any
     return product
 
 
+def _backend_detalhar_status(payload: dict[str, Any]) -> Literal["success", "error"]:
+    status = payload.get("status")
+    if status in {"success", "not_found"}:
+        return "success"
+    return "error"
+
+
+def _record_backend_detalhar(
+    execucoes: list[FerramentaExecucao] | None,
+    status: Literal["success", "error"],
+) -> None:
+    if execucoes is None:
+        return
+    execucoes.append(
+        FerramentaExecucao(nome="detalhar_produto", origem="backend", status=status)
+    )
+
+
 async def validate_and_price_items(
     *,
     selections: list[AgentItemSelection],
     mcp_client: McpCatalogClient,
+    execucoes: list[FerramentaExecucao] | None = None,
 ) -> list[ValidatedLineItem]:
     """Re-fetch each product from MCP and recalculate monetary values."""
     validated: list[ValidatedLineItem] = []
@@ -211,7 +235,16 @@ async def validate_and_price_items(
         if selection.quantidade <= 0 or selection.quantidade > MAX_ITEM_QUANTITY:
             raise InvalidCatalogProductError("Quantidade deve ser um inteiro positivo até 1000.")
 
-        payload = await mcp_client.detalhar_produto(selection.produto_id)
+        try:
+            payload = await mcp_client.detalhar_produto(selection.produto_id)
+        except CatalogUnavailableError:
+            _record_backend_detalhar(execucoes, "error")
+            raise
+        except Exception:
+            _record_backend_detalhar(execucoes, "error")
+            raise
+
+        _record_backend_detalhar(execucoes, _backend_detalhar_status(payload))
         product = _map_tool_payload(payload, selection.produto_id)
         produto_id = _catalog_id(product, selection.produto_id)
         unit_price = _catalog_price(product)

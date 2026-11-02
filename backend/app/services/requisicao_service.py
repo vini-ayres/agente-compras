@@ -21,6 +21,7 @@ from app.schemas.requisicao import (
     AgentItemSelection,
     AgentStructuredOutput,
     CriarRequisicaoRequest,
+    FerramentaExecucao,
     RequisicaoItemOut,
     RequisicaoListResponse,
     RequisicaoOut,
@@ -123,7 +124,7 @@ def ensure_items_were_searched(
 def _to_requisicao_out(
     model: Requisicao,
     *,
-    ferramentas_utilizadas: list[str] | None = None,
+    ferramentas_utilizadas: list[FerramentaExecucao] | None = None,
 ) -> RequisicaoOut:
     return RequisicaoOut(
         id=model.id,
@@ -193,10 +194,12 @@ class RequisicaoService:
             search_observed=run.search_observed,
         )
 
+        backend_execucoes: list[FerramentaExecucao] = []
         try:
             validated_items = await validate_and_price_items(
                 selections=structured.itens,
                 mcp_client=self._mcp_catalog,
+                execucoes=backend_execucoes,
             )
         except ProductNotFoundError:
             raise
@@ -244,7 +247,7 @@ class RequisicaoService:
         return CreateRequisicaoResult(
             _to_requisicao_out(
                 saved,
-                ferramentas_utilizadas=list(run.ferramentas_utilizadas),
+                ferramentas_utilizadas=[*run.ferramentas_utilizadas, *backend_execucoes],
             ),
             created=True,
         )

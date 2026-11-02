@@ -25,9 +25,9 @@ from pydantic import ValidationError
 
 from app.agent.agent import create_mcp_toolset, create_root_agent
 from app.agent.search_ids import collect_search_ids
-from app.agent.tool_names import collect_executed_tool_names
+from app.agent.tool_names import collect_executed_tools
 from app.config import Settings
-from app.schemas.requisicao import AgentStructuredOutput
+from app.schemas.requisicao import AgentStructuredOutput, FerramentaExecucao
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ class AgentRunResult:
     search_product_ids: frozenset[int] = field(default_factory=frozenset)
     search_observed: bool = False
     search_catalog_failed: bool = False
-    ferramentas_utilizadas: list[str] = field(default_factory=list)
+    ferramentas_utilizadas: list[FerramentaExecucao] = field(default_factory=list)
 
 
 class AgentRuntime:
@@ -117,7 +117,7 @@ class AgentRuntime:
             raise AgentExecutionError("Falha ao executar o agente de compras.") from exc
 
         search = collect_search_ids(function_responses)
-        ferramentas_utilizadas = collect_executed_tool_names(function_responses)
+        ferramentas_utilizadas = collect_executed_tools(function_responses)
 
         if not final_text.strip():
             raise AgentInvalidResponseError("Agente não retornou resposta final.")

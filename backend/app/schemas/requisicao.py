@@ -35,6 +35,14 @@ class RequisicaoItemOut(BaseModel):
     subtotal: str
 
 
+class FerramentaExecucao(BaseModel):
+    """One observed MCP tool execution (agent or backend validation)."""
+
+    nome: str = Field(min_length=1)
+    origem: Literal["agent", "backend"]
+    status: Literal["success", "error"]
+
+
 class RequisicaoOut(BaseModel):
     """Single requisition response."""
 
@@ -46,7 +54,7 @@ class RequisicaoOut(BaseModel):
     itens: list[RequisicaoItemOut]
     valor_total: str
     created_at: datetime
-    ferramentas_utilizadas: list[str] = Field(default_factory=list)
+    ferramentas_utilizadas: list[FerramentaExecucao] = Field(default_factory=list)
 
 
 class RequisicaoListResponse(BaseModel):

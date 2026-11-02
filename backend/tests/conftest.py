@@ -17,7 +17,7 @@ from app.config import Settings
 from app.database.connection import get_db_session
 from app.database.models import Base
 from app.main import create_app
-from app.schemas.requisicao import AgentItemSelection, AgentStructuredOutput
+from app.schemas.requisicao import AgentItemSelection, AgentStructuredOutput, FerramentaExecucao
 
 
 @pytest.fixture
@@ -83,7 +83,10 @@ def mock_agent_runtime() -> MagicMock:
             raw_text="{}",
             search_product_ids=frozenset({1, 7}),
             search_observed=True,
-            ferramentas_utilizadas=["buscar_produtos", "detalhar_produto"],
+            ferramentas_utilizadas=[
+                FerramentaExecucao(nome="buscar_produtos", origem="agent", status="success"),
+                FerramentaExecucao(nome="detalhar_produto", origem="agent", status="success"),
+            ],
         )
     )
     runtime.close = AsyncMock()

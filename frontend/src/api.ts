@@ -15,7 +15,14 @@ export type Requisicao = {
   itens: RequisicaoItem[];
   valor_total: string;
   created_at: string;
-  ferramentas_utilizadas?: string[];
+  ferramentas_utilizadas?: Array<
+    | string
+    | {
+        nome: string;
+        origem: "agent" | "backend";
+        status: "success" | "error";
+      }
+  >;
 };
 
 export type RequisicaoListResponse = {

@@ -40,7 +40,10 @@ def test_post_requisicao_success(client) -> None:
     assert body["valor_total"] == "2999.97"
     assert body["itens"][0]["produto_id"] == 7
     assert body["itens"][0]["subtotal"] == "2999.97"
-    assert body["ferramentas_utilizadas"] == ["buscar_produtos", "detalhar_produto"]
+    assert body["ferramentas_utilizadas"] == [
+        {"nome": "buscar_produtos", "origem": "agent", "status": "success"},
+        {"nome": "detalhar_produto", "origem": "agent", "status": "success"},
+    ]
 
 
 def test_get_requisicoes_pagination(client) -> None:
@@ -67,6 +70,7 @@ def test_get_requisicoes_pagination(client) -> None:
     assert data["total"] == 2
     assert data["limit"] == 1
     assert len(data["items"]) == 1
+    assert data["items"][0]["ferramentas_utilizadas"] == []
 
 
 def test_post_invalid_pedido(client) -> None:

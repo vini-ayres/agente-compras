@@ -55,6 +55,58 @@ async def test_price_valid() -> None:
 
 
 @pytest.mark.asyncio
+async def test_records_backend_detalhar_success() -> None:
+    from app.schemas.requisicao import FerramentaExecucao
+
+    client = _client_returning(
+        _success_payload({"id": 7, "title": "Laptop", "price": "999.99"})
+    )
+    execucoes: list[FerramentaExecucao] = []
+    await validate_and_price_items(
+        selections=[_selection()],
+        mcp_client=client,
+        execucoes=execucoes,
+    )
+    assert [item.model_dump() for item in execucoes] == [
+        {"nome": "detalhar_produto", "origem": "backend", "status": "success"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_records_backend_detalhar_payload_error() -> None:
+    from app.schemas.requisicao import FerramentaExecucao
+
+    client = _client_returning({"status": "error", "message": "timeout interno"})
+    execucoes: list[FerramentaExecucao] = []
+    with pytest.raises(CatalogUnavailableError):
+        await validate_and_price_items(
+            selections=[_selection()],
+            mcp_client=client,
+            execucoes=execucoes,
+        )
+    assert [item.model_dump() for item in execucoes] == [
+        {"nome": "detalhar_produto", "origem": "backend", "status": "error"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_records_backend_detalhar_not_found_as_success() -> None:
+    from app.schemas.requisicao import FerramentaExecucao
+
+    client = _client_returning({"status": "not_found"})
+    execucoes: list[FerramentaExecucao] = []
+    with pytest.raises(ProductNotFoundError):
+        await validate_and_price_items(
+            selections=[_selection()],
+            mcp_client=client,
+            execucoes=execucoes,
+        )
+    assert [item.model_dump() for item in execucoes] == [
+        {"nome": "detalhar_produto", "origem": "backend", "status": "success"}
+    ]
+
+
+@pytest.mark.asyncio
 async def test_price_missing() -> None:
     client = _client_returning(_success_payload({"id": 7, "title": "Laptop"}))
     with pytest.raises(InvalidCatalogPriceError):

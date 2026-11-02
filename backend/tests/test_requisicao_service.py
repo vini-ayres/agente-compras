@@ -84,7 +84,10 @@ async def test_criar_requisicao_success(db_session: Session, mock_agent_runtime:
     assert result.requisicao.valor_total == "2999.97"
     assert len(result.requisicao.itens) == 1
     assert result.requisicao.itens[0].subtotal == "2999.97"
-    assert result.requisicao.ferramentas_utilizadas == ["buscar_produtos", "detalhar_produto"]
+    assert [item.model_dump() for item in result.requisicao.ferramentas_utilizadas] == [
+        {"nome": "buscar_produtos", "origem": "agent", "status": "success"},
+        {"nome": "detalhar_produto", "origem": "agent", "status": "success"},
+    ]
 
 
 @pytest.mark.asyncio
@@ -459,3 +462,90 @@ async def test_unobserved_search_does_not_persist(
     with pytest.raises(ProductNotInSearchError):
         await service.criar_requisicao(CriarRequisicaoRequest(pedido="Preciso de laptop"))
     assert service.listar(limit=10, offset=0).total == 0
+
+
+class _FakeCatalog:
+    def __init__(self, payload: dict | Exception) -> None:
+        self._payload = payload
+        self.calls: list[int] = []
+
+    async def detalhar_produto(self, product_id: int) -> dict:
+        self.calls.append(product_id)
+        if isinstance(self._payload, Exception):
+            raise self._payload
+        return self._payload
+
+
+@pytest.mark.asyncio
+async def test_backend_detalhar_produto_is_recorded_on_success(
+    db_session: Session, mock_agent_runtime: MagicMock
+) -> None:
+    from app.schemas.requisicao import FerramentaExecucao
+
+    mock_agent_runtime.run_pedido = AsyncMock(
+        return_value=AgentRunResult(
+            structured=AgentStructuredOutput(
+                status="success",
+                resposta_agente="ok",
+                itens=[AgentItemSelection(produto_id=7, titulo="Laptop", quantidade=3)],
+            ),
+            raw_text="{}",
+            search_product_ids=frozenset({7}),
+            search_observed=True,
+            ferramentas_utilizadas=[
+                FerramentaExecucao(nome="buscar_produtos", origem="agent", status="success"),
+            ],
+        )
+    )
+    service = RequisicaoService(db_session, mock_agent_runtime, "http://localhost:8080/mcp")
+    service._mcp_catalog = _FakeCatalog(  # noqa: SLF001
+        {"status": "success", "product": {"id": 7, "title": "Laptop", "price": "999.99"}}
+    )
+    result = await service.criar_requisicao(CriarRequisicaoRequest(pedido="Preciso de 3 laptops"))
+    dumped = [item.model_dump() for item in result.requisicao.ferramentas_utilizadas]
+    assert dumped == [
+        {"nome": "buscar_produtos", "origem": "agent", "status": "success"},
+        {"nome": "detalhar_produto", "origem": "backend", "status": "success"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_backend_detalhar_failure_is_recorded_as_error() -> None:
+    from app.schemas.requisicao import FerramentaExecucao
+    from app.services.catalog_validation import CatalogUnavailableError, validate_and_price_items
+
+    execucoes: list[FerramentaExecucao] = []
+    client = _FakeCatalog(CatalogUnavailableError("Catálogo indisponível."))
+    with pytest.raises(CatalogUnavailableError):
+        await validate_and_price_items(
+            selections=[AgentItemSelection(produto_id=7, titulo="Laptop", quantidade=1)],
+            mcp_client=client,  # type: ignore[arg-type]
+            execucoes=execucoes,
+        )
+    assert [item.model_dump() for item in execucoes] == [
+        {"nome": "detalhar_produto", "origem": "backend", "status": "error"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_listar_does_not_invent_ferramentas(
+    db_session: Session, mock_agent_runtime: MagicMock
+) -> None:
+    service = RequisicaoService(db_session, mock_agent_runtime, "http://localhost:8080/mcp")
+    with patch(
+        "app.services.requisicao_service.validate_and_price_items",
+        new=AsyncMock(
+            return_value=[
+                ValidatedLineItem(
+                    produto_id=7,
+                    titulo="Laptop",
+                    quantidade=3,
+                    preco_unitario=Decimal("999.99"),
+                    subtotal=Decimal("2999.97"),
+                )
+            ]
+        ),
+    ):
+        await service.criar_requisicao(CriarRequisicaoRequest(pedido="Preciso de 3 notebooks"))
+    listed = service.listar(limit=10, offset=0)
+    assert listed.items[0].ferramentas_utilizadas == []

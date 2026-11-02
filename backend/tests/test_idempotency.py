@@ -59,7 +59,10 @@ def test_idempotency_replay_same_payload(client) -> None:
     assert first.status_code == 201
     assert second.status_code == 200
     assert first.json()["id"] == second.json()["id"]
-    assert first.json()["ferramentas_utilizadas"] == ["buscar_produtos", "detalhar_produto"]
+    assert first.json()["ferramentas_utilizadas"] == [
+        {"nome": "buscar_produtos", "origem": "agent", "status": "success"},
+        {"nome": "detalhar_produto", "origem": "agent", "status": "success"},
+    ]
     assert second.json()["ferramentas_utilizadas"] == []
     listed = client.get("/requisicoes")
     assert listed.json()["total"] == 1
@@ -186,6 +189,11 @@ async def test_idempotency_concurrent_same_key_persists_once(
             assert isinstance(error, IdempotencyConflictError)
         assert len(outcomes) >= 1
         assert sum(1 for item in outcomes if item.created) <= 1
+        for item in outcomes:
+            if item.created:
+                assert item.requisicao.ferramentas_utilizadas
+            else:
+                assert item.requisicao.ferramentas_utilizadas == []
         inspector = session_local()
         try:
             _rows, total = RequisicaoRepository(inspector).list_requisicoes(limit=10, offset=0)
