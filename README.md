@@ -98,6 +98,28 @@ npm test
 npm run build
 ```
 
+## Avaliação funcional do agente
+
+A avaliação é uma suíte de **regressão determinística** do backend e das regras do agente. Ela **não** chama LLM, **não** usa API key, **não** acessa DummyJSON na internet e **não** mede a qualidade das respostas de um modelo real.
+
+Cada um dos cinco cenários vale 20 pontos (20 se todos os critérios passarem, 0 se algum falhar). Aprovação geral exige 100/100.
+
+| Cenário | Prompt | Esperado |
+|---|---|---|
+| Compra válida | Preciso de 3 laptops até US$ 2.000 cada. | Item da busca, quantidade 3, unitário ≤ 2000, total correto, persistido |
+| Nenhum produto encontrado | Preciso comprar um reator nuclear portátil. | Sem invenção, mensagem controlada, nada persistido |
+| Solicitação ambígua | Preciso comprar alguns equipamentos para meu escritório. | Pede mais informação, não persiste |
+| Falha no catálogo | Preciso de 2 notebooks. | Erro amigável de catálogo, nada persistido |
+| Produto fora da busca | Preciso de 2 notebooks. | ID existente no catálogo mas ausente na busca é rejeitado |
+
+Na raiz do repositório:
+
+```powershell
+python backend/scripts/evaluate_agent.py
+```
+
+O processo termina com código diferente de zero se algum cenário for reprovado. O relatório lista o esperado, o obtido, o status e os critérios que falharam.
+
 ## Uso de inteligência artificial no desenvolvimento
 
 O projeto foi desenvolvido com assistência de um agente de programação no Cursor. Arquitetura, contratos, testes e o conteúdo deste repositório foram revisados no código real antes de cada commit.
