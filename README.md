@@ -30,14 +30,14 @@ Para usar OpenRouter:
 
 ```env
 LLM_PROVIDER=openrouter
-GEMINI_API_KEY=sua-chave
+OPENROUTER_API_KEY=sua-chave
 ```
 
 Ou Gemini:
 
 ```env
 LLM_PROVIDER=gemini
-OPENROUTER_API_KEY=sua-chave
+GEMINI_API_KEY=sua-chave
 ```
 
 4. Inicie os serviços:
