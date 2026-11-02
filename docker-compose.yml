@@ -28,9 +28,10 @@ services:
       HOST: 0.0.0.0
       PORT: 8080
       STREAMABLE_HTTP_PATH: /mcp
-      ENABLE_DNS_REBINDING_PROTECTION: "false"
-    ports:
-      - "8080:8080"
+      ENABLE_DNS_REBINDING_PROTECTION: "true"
+      MCP_ALLOWED_HOSTS: "mcp-server:8080,127.0.0.1:8080,localhost:8080"
+    expose:
+      - "8080"
     healthcheck:
       test:
         [

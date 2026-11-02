@@ -67,7 +67,7 @@ docker compose up -d --build
 
 - Chat: http://localhost:5173
 - API: http://localhost:8000/health
-- MCP: http://localhost:8080/health
+- MCP: apenas na rede Docker (`http://mcp-server:8080`); a porta 8080 não é publicada no host
 
 ## API
 

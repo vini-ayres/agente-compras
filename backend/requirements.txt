@@ -1,4 +1,5 @@
 google-adk[mcp,extensions]>=2.13.0
+mcp>=1.26.0
 litellm>=1.84
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0

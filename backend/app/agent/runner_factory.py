@@ -50,6 +50,7 @@ class AgentRunResult:
     raw_text: str
     search_product_ids: frozenset[int] = field(default_factory=frozenset)
     search_observed: bool = False
+    search_catalog_failed: bool = False
     ferramentas_utilizadas: list[str] = field(default_factory=list)
 
 
@@ -115,7 +116,7 @@ class AgentRuntime:
             logger.exception("Falha ao executar agente ADK")
             raise AgentExecutionError("Falha ao executar o agente de compras.") from exc
 
-        search_product_ids, search_observed = collect_search_ids(function_responses)
+        search = collect_search_ids(function_responses)
         ferramentas_utilizadas = collect_executed_tool_names(function_responses)
 
         if not final_text.strip():
@@ -130,8 +131,9 @@ class AgentRuntime:
         return AgentRunResult(
             structured=structured,
             raw_text=final_text,
-            search_product_ids=search_product_ids,
-            search_observed=search_observed,
+            search_product_ids=search.product_ids,
+            search_observed=search.observed,
+            search_catalog_failed=search.catalog_failed,
             ferramentas_utilizadas=ferramentas_utilizadas,
         )
 

@@ -21,10 +21,11 @@ dummyjson_client = DummyJsonClient(settings)
 mcp = MCPServer("purchase-agent-catalog")
 
 
-def _transport_security(settings: Settings) -> TransportSecuritySettings | None:
-    if settings.enable_dns_rebinding_protection:
-        return TransportSecuritySettings(enable_dns_rebinding_protection=True)
-    return TransportSecuritySettings(enable_dns_rebinding_protection=False)
+def _transport_security(settings: Settings) -> TransportSecuritySettings:
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=settings.enable_dns_rebinding_protection,
+        allowed_hosts=settings.allowed_hosts_list(),
+    )
 
 
 @mcp.tool(name="buscar_produtos")

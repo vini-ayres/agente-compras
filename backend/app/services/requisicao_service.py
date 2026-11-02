@@ -180,6 +180,12 @@ class RequisicaoService:
 
         run = await self._run_agent(body.pedido)
         structured = run.structured
+        if run.search_catalog_failed:
+            logger.info(
+                "Busca MCP indisponível; texto interno do agente não será devolvido ao cliente"
+            )
+            logger.debug("Texto interno do agente: %s", structured.resposta_agente)
+            raise CatalogUnavailableBusinessError(USER_CATALOG_UNAVAILABLE)
         self._ensure_agent_status(structured)
         ensure_items_were_searched(
             structured.itens,

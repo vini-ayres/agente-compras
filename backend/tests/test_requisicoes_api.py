@@ -137,6 +137,59 @@ def test_post_product_not_in_search_returns_422(client, mock_agent_runtime) -> N
     assert "busca" in response.json()["detail"]
 
 
+def test_post_search_infra_error_returns_503_even_if_agent_selects_products(
+    client, mock_agent_runtime
+) -> None:
+    from app.agent.runner_factory import AgentRunResult
+    from app.schemas.requisicao import AgentItemSelection, AgentStructuredOutput
+    from app.services.requisicao_service import USER_CATALOG_UNAVAILABLE
+
+    mock_agent_runtime.run_pedido = AsyncMock(
+        return_value=AgentRunResult(
+            structured=AgentStructuredOutput(
+                status="success",
+                resposta_agente="Selecionei um laptop inventado.",
+                itens=[AgentItemSelection(produto_id=7, titulo="Laptop", quantidade=3)],
+            ),
+            raw_text="{}",
+            search_product_ids=frozenset(),
+            search_observed=True,
+            search_catalog_failed=True,
+        )
+    )
+    response = client.post("/requisicoes", json={"pedido": "Preciso de 3 laptops"})
+    assert response.status_code == 503
+    assert response.json()["detail"] == USER_CATALOG_UNAVAILABLE
+    assert client.get("/requisicoes").json()["total"] == 0
+
+
+def test_post_empty_search_with_selected_product_returns_422_not_503(
+    client, mock_agent_runtime
+) -> None:
+    from app.agent.runner_factory import AgentRunResult
+    from app.schemas.requisicao import AgentItemSelection, AgentStructuredOutput
+    from app.services.requisicao_service import USER_CATALOG_UNAVAILABLE
+
+    mock_agent_runtime.run_pedido = AsyncMock(
+        return_value=AgentRunResult(
+            structured=AgentStructuredOutput(
+                status="success",
+                resposta_agente="Vou usar um id conhecido.",
+                itens=[AgentItemSelection(produto_id=7, titulo="Laptop", quantidade=1)],
+            ),
+            raw_text="{}",
+            search_product_ids=frozenset(),
+            search_observed=True,
+            search_catalog_failed=False,
+        )
+    )
+    response = client.post("/requisicoes", json={"pedido": "Preciso de laptop"})
+    assert response.status_code == 422
+    assert response.json()["detail"] != USER_CATALOG_UNAVAILABLE
+    assert "busca" in response.json()["detail"]
+    assert client.get("/requisicoes").json()["total"] == 0
+
+
 def test_post_catalog_unavailable_returns_503(client) -> None:
     from app.services.catalog_validation import CatalogUnavailableError
     from app.services.requisicao_service import USER_CATALOG_UNAVAILABLE

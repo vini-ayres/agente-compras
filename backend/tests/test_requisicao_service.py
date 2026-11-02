@@ -290,6 +290,82 @@ async def test_persisted_response_uses_catalog_not_llm_text(
 
 
 @pytest.mark.asyncio
+async def test_search_infra_error_is_unavailable_even_if_agent_selects_products(
+    db_session: Session, mock_agent_runtime: MagicMock
+) -> None:
+    mock_agent_runtime.run_pedido = AsyncMock(
+        return_value=AgentRunResult(
+            structured=AgentStructuredOutput(
+                status="success",
+                resposta_agente="Selecionei um laptop por US$ 1.00.",
+                itens=[AgentItemSelection(produto_id=7, titulo="Laptop", quantidade=3)],
+            ),
+            raw_text="{}",
+            search_product_ids=frozenset(),
+            search_observed=True,
+            search_catalog_failed=True,
+        )
+    )
+    service = RequisicaoService(db_session, mock_agent_runtime, "http://localhost:8080/mcp")
+    with pytest.raises(CatalogUnavailableBusinessError) as exc_info:
+        await service.criar_requisicao(CriarRequisicaoRequest(pedido="Preciso de 3 laptops"))
+    assert str(exc_info.value) == USER_CATALOG_UNAVAILABLE
+    assert "1.00" not in str(exc_info.value)
+    assert service.listar(limit=10, offset=0).total == 0
+
+
+@pytest.mark.asyncio
+async def test_empty_search_is_not_catalog_unavailable(
+    db_session: Session, mock_agent_runtime: MagicMock
+) -> None:
+    from app.services.catalog_validation import ProductNotInSearchError
+
+    mock_agent_runtime.run_pedido = AsyncMock(
+        return_value=AgentRunResult(
+            structured=AgentStructuredOutput(
+                status="success",
+                resposta_agente="Vou usar um id conhecido.",
+                itens=[AgentItemSelection(produto_id=7, titulo="Laptop", quantidade=1)],
+            ),
+            raw_text="{}",
+            search_product_ids=frozenset(),
+            search_observed=True,
+            search_catalog_failed=False,
+        )
+    )
+    service = RequisicaoService(db_session, mock_agent_runtime, "http://localhost:8080/mcp")
+    with pytest.raises(ProductNotInSearchError):
+        await service.criar_requisicao(CriarRequisicaoRequest(pedido="Preciso de laptop"))
+    assert service.listar(limit=10, offset=0).total == 0
+
+
+@pytest.mark.asyncio
+async def test_empty_search_with_no_products_status_stays_no_products(
+    db_session: Session, mock_agent_runtime: MagicMock
+) -> None:
+    mock_agent_runtime.run_pedido = AsyncMock(
+        return_value=AgentRunResult(
+            structured=AgentStructuredOutput(
+                status="no_products",
+                resposta_agente="Nada encontrado.",
+                itens=[],
+            ),
+            raw_text="{}",
+            search_product_ids=frozenset(),
+            search_observed=True,
+            search_catalog_failed=False,
+        )
+    )
+    service = RequisicaoService(db_session, mock_agent_runtime, "http://localhost:8080/mcp")
+    with pytest.raises(NoProductsError) as exc_info:
+        await service.criar_requisicao(
+            CriarRequisicaoRequest(pedido="Preciso comprar um reator nuclear portátil.")
+        )
+    assert str(exc_info.value) == USER_NO_PRODUCTS
+    assert service.listar(limit=10, offset=0).total == 0
+
+
+@pytest.mark.asyncio
 async def test_product_not_in_current_search_is_rejected(
     db_session: Session, mock_agent_runtime: MagicMock
 ) -> None:

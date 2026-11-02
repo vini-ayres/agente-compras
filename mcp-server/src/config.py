@@ -15,8 +15,13 @@ class Settings(BaseSettings):
     port: int = 8080
     streamable_http_path: str = "/mcp"
 
-    # Disable in Docker / LAN so Host headers like mcp-server:8080 are accepted.
-    enable_dns_rebinding_protection: bool = False
+    enable_dns_rebinding_protection: bool = True
+    # Host headers accepted when DNS rebinding protection is on.
+    # Docker Compose adds mcp-server:8080 for the backend/ADK client.
+    mcp_allowed_hosts: str = "127.0.0.1:8080,localhost:8080"
+
+    def allowed_hosts_list(self) -> list[str]:
+        return [host.strip() for host in self.mcp_allowed_hosts.split(",") if host.strip()]
 
 
 _settings: Settings | None = None

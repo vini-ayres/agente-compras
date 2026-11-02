@@ -277,3 +277,20 @@ async def test_mcp_structured_not_found_preserved() -> None:
             selections=[_selection(produto_id=999, quantidade=1)],
             mcp_client=SimpleNamespace(detalhar_produto=AsyncMock(return_value=payload)),
         )
+
+
+def test_catalog_client_uses_public_mcp_http_api() -> None:
+    import inspect
+
+    import app.services.catalog_validation as module
+
+    source = inspect.getsource(module)
+    assert "import httpx2" not in source
+    assert "from mcp.shared._httpx_utils" not in source
+    assert "from mcp.client.streamable_http import create_mcp_http_client" in source
+
+
+def test_http_timeout_is_portable_tuple() -> None:
+    from app.services.catalog_validation import _http_timeout
+
+    assert _http_timeout(10.0, 120.0) == (10.0, 120.0, 10.0, 10.0)
