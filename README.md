@@ -1,5 +1,7 @@
 # Purchase Agent
 
+[![CI](https://github.com/vini-ayres/agente-compras/actions/workflows/ci.yml/badge.svg)](https://github.com/vini-ayres/agente-compras/actions/workflows/ci.yml)
+
 Agente de compras: o usuário descreve o pedido em português no chat, o backend interpreta a solicitação com um LLM, consulta o catálogo DummyJSON via MCP e grava uma requisição no PostgreSQL.
 
 ## Arquitetura
@@ -94,6 +96,45 @@ python -m pytest -q
 
 cd ..\frontend
 npm ci
+npm test
+npm run build
+```
+
+## Integração contínua (CI)
+
+A pipeline em `.github/workflows/ci.yml` roda em todo push e em todo pull request para `main`. Os três jobs (`backend`, `mcp-server`, `frontend`) são independentes; falha de lint, testes ou build reprova o job.
+
+A CI **não** usa chaves de API, **não** chama LLM, **não** acessa DummyJSON e **não** depende de PostgreSQL externo. A avaliação determinística dos cinco cenários entra no job do backend com os mesmos mocks da suíte local.
+
+| Job | Ferramentas | O que verifica |
+|---|---|---|
+| Backend | Python 3.12, Ruff, Pytest | Lint, testes unitários/de API e `evaluate_agent.py` |
+| MCP Server | Python 3.12, Ruff, Pytest | Lint e testes do servidor de catálogo |
+| Frontend | Node.js 22, ESLint, Vitest, Vite | Lint, testes e build de produção |
+
+Ruff cobre pycodestyle (`E`/`W`) e Pyflakes (`F`), sem `--fix`. ESLint usa as regras recomendadas de JavaScript/TypeScript e os hooks clássicos do React (`rules-of-hooks`, `exhaustive-deps`).
+
+Para reproduzir a CI localmente:
+
+```powershell
+# Backend
+cd backend
+pip install -r requirements.txt
+pip install ruff
+ruff check .
+python -m pytest -q
+python scripts/evaluate_agent.py
+
+# MCP Server
+cd ..\mcp-server
+pip install -e ".[dev]"
+ruff check .
+python -m pytest -q
+
+# Frontend
+cd ..\frontend
+npm ci
+npm run lint
 npm test
 npm run build
 ```
