@@ -1,5 +1,5 @@
-import { FormEvent, useEffect, useState } from "react";
-import { criarRequisicao, listarRequisicoes, type Requisicao } from "./api";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { createIdempotencyKey, criarRequisicao, listarRequisicoes, type Requisicao } from "./api";
 
 export default function App() {
   const [pedido, setPedido] = useState("Preciso de 3 laptops até US$ 2000 cada.");
@@ -7,6 +7,7 @@ export default function App() {
   const [erro, setErro] = useState<string | null>(null);
   const [atual, setAtual] = useState<Requisicao | null>(null);
   const [historico, setHistorico] = useState<Requisicao[]>([]);
+  const operacaoKeyRef = useRef<string | null>(null);
 
   async function carregarHistorico() {
     const data = await listarRequisicoes();
@@ -21,15 +22,21 @@ export default function App() {
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (operacaoKeyRef.current !== null) {
+      return;
+    }
+    const idempotencyKey = createIdempotencyKey();
+    operacaoKeyRef.current = idempotencyKey;
     setErro(null);
     setEnviando(true);
     try {
-      const criada = await criarRequisicao(pedido);
+      const criada = await criarRequisicao(pedido, idempotencyKey);
       setAtual(criada);
       await carregarHistorico();
     } catch (err: unknown) {
       setErro(err instanceof Error ? err.message : "Falha ao criar a requisição.");
     } finally {
+      operacaoKeyRef.current = null;
       setEnviando(false);
     }
   }

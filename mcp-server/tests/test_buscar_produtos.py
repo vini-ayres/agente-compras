@@ -96,6 +96,33 @@ async def test_buscar_produtos_invalid_term(client: DummyJsonClient) -> None:
     assert result["error_kind"] == "invalid_input"
 
 
+@pytest.mark.asyncio
+async def test_buscar_produtos_skips_items_without_price(client: DummyJsonClient) -> None:
+    client.search_products = AsyncMock(
+        return_value={
+            "products": [
+                {"id": 1, "title": "Sem preço"},
+                {
+                    "id": 2,
+                    "title": "Com preço",
+                    "description": "",
+                    "category": "laptops",
+                    "price": 10,
+                    "stock": 1,
+                    "rating": 4.0,
+                },
+            ],
+            "total": 2,
+        }
+    )
+
+    result = await execute_buscar_produtos("laptop", client)
+
+    assert result["status"] == "success"
+    assert [p["id"] for p in result["products"]] == [2]
+    assert "detail" not in result
+
+
 def _raise_timeout(_request: httpx.Request) -> httpx.Response:
     raise httpx.TimeoutException("timed out")
 

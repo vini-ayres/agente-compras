@@ -1,12 +1,65 @@
 # Purchase Agent
 
-Agente de compras: o usuário descreve o pedido em um chat, o backend consulta o catálogo DummyJSON via MCP e grava uma requisição no PostgreSQL.
+Agente de compras: o usuário descreve o pedido em português no chat, o backend interpreta a solicitação com um LLM, consulta o catálogo DummyJSON via MCP e grava uma requisição no PostgreSQL.
+
+## Arquitetura
+
+| Componente | Tecnologia | Função |
+|---|---|---|
+| Chat | React + Vite | Formulário de pedido e histórico |
+| API | FastAPI + SQLAlchemy | Orquestra o agente, valida o catálogo e persiste |
+| Agente | Google ADK + LiteLLM | Interpreta o pedido e escolhe produtos |
+| Catálogo | MCP Server (Streamable HTTP) | Expõe DummyJSON como ferramentas |
+| Banco | PostgreSQL | Requisições, itens e chaves de idempotência |
+
+O LLM decide quando chamar as ferramentas. Não há sequência fixa de `buscar_produtos` / `detalhar_produto`. Depois da escolha, o backend:
+
+1. Aceita apenas IDs que apareceram em `buscar_produtos` na mesma execução.
+2. Recalcula título, preço, subtotal e total com `detalhar_produto` e `Decimal`.
+3. Persiste um resumo factual gerado no backend, sem prosa comercial do modelo.
+
+## MCP Server
+
+Ferramentas:
+
+- `buscar_produtos(termo)` — pesquisa no DummyJSON.
+- `detalhar_produto(id)` — detalhe de um produto, incluindo preço.
+
+Transporte: Streamable HTTP em `/mcp`. Health: `GET /health`.
+
+## Modelo LLM
+
+O agente usa Google ADK + LiteLLM. O provedor é selecionado por `LLM_PROVIDER` no `.env`, sem alterar o código.
+
+- `LLM_PROVIDER=gemini`: `GEMINI_API_KEY` + `GEMINI_MODEL` (padrão `gemini/gemini-3.6-flash`)
+- `LLM_PROVIDER=openrouter`: `OPENROUTER_API_KEY` + `OPENROUTER_MODEL` (padrão `openrouter/google/gemini-3.6-flash`)
+- Não há fallback automático entre chaves ou modelos dos dois provedores
+- Function calling, structured outputs e tarefas agênticas
+- O ADK instancia `LiteLlm`; o modelo decide quando chamar `buscar_produtos` e `detalhar_produto`
+- `output_schema` (`AgentStructuredOutput`) permanece; no Gemini (direto ou via OpenRouter) o ADK aplica o workaround `set_model_response` para combinar schema e tools
+- `LLM_MAX_OUTPUT_TOKENS` (padrão 4096) é enviado ao LiteLLM como `max_tokens`/`max_completion_tokens` para evitar a reserva de 65536 no OpenRouter
+
+## Variáveis de ambiente
+
+Copie `.env.example` para `.env` e preencha os valores reais. O exemplo contém apenas placeholders (`POSTGRES_PASSWORD=change-me`, chaves de API vazias).
+
+Principais variáveis:
+
+- `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`
+- `DATABASE_URL` (no Docker o Compose redefine o host para o serviço `postgres`)
+- `LLM_PROVIDER` (`gemini` ou `openrouter`)
+- `GEMINI_API_KEY`, `GEMINI_MODEL`
+- `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`
+- `LLM_MAX_OUTPUT_TOKENS`
+- `CORS_ORIGINS`
+- `MCP_SERVER_URL` (no Docker: `http://mcp-server:8080/mcp`)
+- `DUMMYJSON_BASE_URL`, `HTTP_TIMEOUT_SECONDS`
 
 ## Como subir
 
 ```powershell
 copy .env.example .env
-# preencha GEMINI_API_KEY e POSTGRES_PASSWORD
+# preencha POSTGRES_PASSWORD e a chave do provedor escolhido (GEMINI_API_KEY ou OPENROUTER_API_KEY)
 docker compose up -d --build
 ```
 
@@ -14,18 +67,37 @@ docker compose up -d --build
 - API: http://localhost:8000/health
 - MCP: http://localhost:8080/health
 
+## API
+
 `POST /requisicoes` com `{"pedido": "Preciso de 3 laptops até US$ 2000 cada."}`
 
-## Modelo LLM
+- 201: requisição criada
+- 200: replay de idempotência (mesma chave e mesmo pedido)
+- 409: `Idempotency-Key` já usada com outro pedido
+- 422: pedido inválido, sem produtos, informação insuficiente ou produto fora da busca
+- 503: catálogo, agente ou persistência indisponíveis
 
-O agente usa **Google AI Studio** via LiteLLM, sem substituir o Google ADK.
+Cabeçalho opcional `Idempotency-Key`: a mesma chave com o mesmo `pedido` devolve a requisição original; a mesma chave com outro `pedido` retorna HTTP 409. Sem o cabeçalho, cada chamada cria uma nova requisição. O chat gera um UUID por envio (não pelo texto) e reutiliza a chave só no retry de falha de rede da mesma operação.
 
-- Modelo: `gemini/gemini-3.6-flash`
-- Variável: `GEMINI_API_KEY` (somente no `.env`)
-- Function calling, structured outputs e tarefas agênticas
-- O ADK instancia `LiteLlm`; o modelo decide quando chamar `buscar_produtos` e `detalhar_produto`
-- `output_schema` (`AgentStructuredOutput`) permanece; no Gemini AI Studio o ADK aplica o workaround `set_model_response` para combinar schema e tools
+`GET /requisicoes?limit=20&offset=0` lista as requisições mais recentes (`limit` 1–100).
 
-A configuração OpenRouter permanece no ambiente como legado e não é usada pelo agente ativo.
+O backend valida os itens no catálogo, grava um resumo factual (nome, quantidade, preços e total) e ignora afirmações comerciais do texto do LLM. Erros de `no_products`, `insufficient_info` e `catalog_unavailable` devolvem mensagens controladas pelo backend.
 
-O agente decide sozinho quando chamar `buscar_produtos` e `detalhar_produto`. Preços e totais são recalculados no backend com `Decimal`.
+## Testes
+
+```powershell
+cd backend
+python -m pytest -q
+
+cd ..\mcp-server
+python -m pytest -q
+
+cd ..\frontend
+npm ci
+npm test
+npm run build
+```
+
+## Uso de inteligência artificial no desenvolvimento
+
+O projeto foi desenvolvido com assistência de um agente de programação no Cursor. Arquitetura, contratos, testes e o conteúdo deste repositório foram revisados no código real antes de cada commit.

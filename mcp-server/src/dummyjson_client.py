@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 import httpx
@@ -10,10 +10,21 @@ import httpx
 from config import Settings
 
 
+def _map_price(raw: dict[str, Any]) -> str:
+    if "price" not in raw or raw["price"] is None:
+        raise DummyJsonInvalidResponseError("Product is missing price")
+    try:
+        amount = Decimal(str(raw["price"]))
+    except (InvalidOperation, ValueError, TypeError) as exc:
+        raise DummyJsonInvalidResponseError("Invalid product price") from exc
+    if not amount.is_finite() or amount < 0:
+        raise DummyJsonInvalidResponseError("Invalid product price")
+    return str(amount)
+
+
 def map_product_fields(raw: dict[str, Any]) -> dict[str, Any]:
     """Map DummyJSON product JSON to the fields exposed by MCP tools."""
-    price_raw = raw.get("price", 0)
-    price = str(Decimal(str(price_raw)))
+    price = _map_price(raw)
 
     stock_raw = raw.get("stock", 0)
     try:

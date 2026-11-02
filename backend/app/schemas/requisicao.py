@@ -6,7 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class CriarRequisicaoRequest(BaseModel):
@@ -57,12 +57,15 @@ class RequisicaoListResponse(BaseModel):
     offset: int
 
 
+MAX_ITEM_QUANTITY = 1000
+
+
 class AgentItemSelection(BaseModel):
     """Structured item proposal from the agent (quantities/ids only are trusted after validation)."""
 
     produto_id: int = Field(gt=0)
     titulo: str = Field(min_length=1)
-    quantidade: int = Field(gt=0)
+    quantidade: int = Field(gt=0, le=MAX_ITEM_QUANTITY)
 
 
 class AgentStructuredOutput(BaseModel):
@@ -72,12 +75,20 @@ class AgentStructuredOutput(BaseModel):
     resposta_agente: str = Field(min_length=1)
     itens: list[AgentItemSelection] = Field(default_factory=list)
 
+    @model_validator(mode="after")
+    def status_matches_items(self) -> AgentStructuredOutput:
+        if self.status == "success" and not self.itens:
+            raise ValueError("status success requer ao menos um item.")
+        if self.status != "success" and self.itens:
+            raise ValueError("somente status success pode incluir itens.")
+        return self
+
 
 class ValidatedLineItem(BaseModel):
     """Backend-validated line with authoritative pricing."""
 
-    produto_id: int
-    titulo: str
-    quantidade: int
+    produto_id: int = Field(gt=0)
+    titulo: str = Field(min_length=1)
+    quantidade: int = Field(gt=0, le=MAX_ITEM_QUANTITY)
     preco_unitario: Decimal
     subtotal: Decimal

@@ -40,7 +40,6 @@ def _catalog_unavailable_response(exc: DummyJsonError) -> dict[str, Any]:
             "O catálogo está indisponível no momento. "
             "Tente novamente em instantes."
         ),
-        "detail": exc.message,
         "product": None,
     }
 
@@ -69,7 +68,10 @@ async def execute_detalhar_produto(product_id: int, client: DummyJsonClient) -> 
     except (DummyJsonTimeoutError, DummyJsonConnectionError, DummyJsonHttpError, DummyJsonInvalidResponseError) as exc:
         return _catalog_unavailable_response(exc)
 
-    product = map_product_fields(payload)
+    try:
+        product = map_product_fields(payload)
+    except DummyJsonInvalidResponseError as exc:
+        return _catalog_unavailable_response(exc)
 
     return {
         "status": "success",

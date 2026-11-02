@@ -11,8 +11,10 @@ from config import Settings
 from dummyjson_client import (
     DummyJsonClient,
     DummyJsonHttpError,
+    DummyJsonInvalidResponseError,
     DummyJsonNotFoundError,
     DummyJsonTimeoutError,
+    map_product_fields,
 )
 from tools.detalhar_produto import execute_detalhar_produto
 
@@ -20,6 +22,27 @@ from tools.detalhar_produto import execute_detalhar_produto
 @pytest.fixture
 def client(settings: Settings) -> DummyJsonClient:
     return DummyJsonClient(settings)
+
+
+def test_map_product_fields_rejects_missing_price() -> None:
+    with pytest.raises(DummyJsonInvalidResponseError):
+        map_product_fields({"id": 1, "title": "X"})
+
+
+def test_map_product_fields_keeps_numeric_price() -> None:
+    mapped = map_product_fields(
+        {
+            "id": 7,
+            "title": "Apple MacBook Pro",
+            "description": "MacBook Pro",
+            "category": "laptops",
+            "price": 1749.99,
+            "stock": 25,
+            "rating": 4.77,
+        }
+    )
+    assert mapped["price"] == "1749.99"
+    assert mapped["title"] == "Apple MacBook Pro"
 
 
 @pytest.mark.asyncio
@@ -82,6 +105,27 @@ async def test_detalhar_produto_invalid_id(client: DummyJsonClient) -> None:
 
     assert result["status"] == "error"
     assert result["error_kind"] == "invalid_input"
+
+
+@pytest.mark.asyncio
+async def test_detalhar_produto_missing_price_is_error(client: DummyJsonClient) -> None:
+    client.get_product = AsyncMock(
+        return_value={
+            "id": 7,
+            "title": "Apple MacBook Pro",
+            "description": "MacBook Pro",
+            "category": "laptops",
+            "stock": 25,
+            "rating": 4.77,
+        }
+    )
+
+    result = await execute_detalhar_produto(7, client)
+
+    assert result["status"] == "error"
+    assert result["error_kind"] == "invalid_response"
+    assert result["product"] is None
+    assert "detail" not in result
 
 
 @pytest.mark.asyncio

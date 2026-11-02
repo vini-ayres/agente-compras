@@ -13,7 +13,7 @@ from mcp.client.session import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 from mcp.shared._httpx_utils import create_mcp_http_client
 
-from app.schemas.requisicao import AgentItemSelection, ValidatedLineItem
+from app.schemas.requisicao import MAX_ITEM_QUANTITY, AgentItemSelection, ValidatedLineItem
 from app.services.pricing import decimal_from_catalog, line_subtotal
 
 logger = logging.getLogger(__name__)
@@ -45,6 +45,10 @@ class InvalidCatalogTitleError(CatalogValidationError):
 
 class InvalidCatalogProductError(CatalogValidationError):
     kind = "invalid_product"
+
+
+class ProductNotInSearchError(CatalogValidationError):
+    kind = "product_not_in_search"
 
 
 def _timeout_types() -> tuple[type[BaseException], ...]:
@@ -202,8 +206,8 @@ async def validate_and_price_items(
     """Re-fetch each product from MCP and recalculate monetary values."""
     validated: list[ValidatedLineItem] = []
     for selection in selections:
-        if selection.quantidade <= 0:
-            raise InvalidCatalogProductError("Quantidade deve ser positiva.")
+        if selection.quantidade <= 0 or selection.quantidade > MAX_ITEM_QUANTITY:
+            raise InvalidCatalogProductError("Quantidade deve ser um inteiro positivo até 1000.")
 
         payload = await mcp_client.detalhar_produto(selection.produto_id)
         product = _map_tool_payload(payload, selection.produto_id)

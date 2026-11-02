@@ -5,9 +5,10 @@ from __future__ import annotations
 from decimal import Decimal
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from app.database.models import Requisicao, RequisicaoItem
+from app.database.models import IdempotencyRecord, Requisicao, RequisicaoItem
 from app.schemas.requisicao import ValidatedLineItem
 
 
@@ -41,7 +42,7 @@ class RequisicaoRepository:
                 )
             )
         self._db.add(requisicao)
-        self._db.commit()
+        self._db.flush()
         self._db.refresh(requisicao)
         return requisicao
 
@@ -64,3 +65,24 @@ class RequisicaoRepository:
             .where(Requisicao.id == requisicao_id)
         )
         return self._db.scalar(stmt)
+
+    def get_idempotency(self, key: str) -> IdempotencyRecord | None:
+        stmt = select(IdempotencyRecord).where(IdempotencyRecord.key == key)
+        return self._db.scalar(stmt)
+
+    def save_idempotency(self, key: str, request_hash: str, requisicao_id: int) -> bool:
+        """Persist a completed key. Returns False on unique conflict."""
+        try:
+            with self._db.begin_nested():
+                self._db.add(
+                    IdempotencyRecord(
+                        key=key,
+                        request_hash=request_hash,
+                        status="completed",
+                        requisicao_id=requisicao_id,
+                    )
+                )
+                self._db.flush()
+            return True
+        except IntegrityError:
+            return False

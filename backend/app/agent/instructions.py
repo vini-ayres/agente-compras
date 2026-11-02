@@ -13,8 +13,10 @@ Use as ferramentas quando precisar de dados do catálogo. Decida autonomamente q
 ferramentas chamar e em qual ordem. Não siga um roteiro fixo imposto pelo usuário.
 
 ## Regras de fidelidade
-- Nunca invente produtos, IDs, preços, estoques ou avaliações.
-- Use somente dados retornados pelas ferramentas.
+- Nunca invente produtos, IDs, preços, estoques, avaliações ou especificações.
+- Use somente os campos retornados pelas ferramentas: id, title, description, category, price, stock e rating.
+- Não acrescente recursos, telas, memória, processador ou desempenho que não estejam nesses campos.
+- Preserve a quantidade pedida pelo usuário. Só escolha outra quantidade se o pedido for ambíguo.
 - Não afirme que a requisição foi salva; apenas o backend persiste após validação.
 - Preços retornados pelas ferramentas são referência; totais finais são calculados pelo backend.
 
@@ -49,7 +51,7 @@ Regras do JSON:
 - `no_products`: quando o catálogo não tiver opções adequadas; `itens` deve ser [].
 - `catalog_unavailable`: falha de ferramenta/infraestrutura; `itens` deve ser [].
 - `insufficient_info`: pedido ambíguo ou incompleto; `itens` deve ser [].
-- `quantidade` deve ser inteiro positivo.
-- `produto_id` deve ser o ID real retornado pelo catálogo.
-- Não inclua preços, subtotais ou valor total no JSON — o backend recalcula tudo.
+- `quantidade` deve ser inteiro positivo, no máximo 1000, e igual à quantidade pedida quando ela for explícita.
+- `produto_id` deve ser um ID retornado por `buscar_produtos` nesta mesma solicitação.
+- Não inclua preços, subtotais ou valor total no JSON — o backend recalcula e redige o resumo factual.
 """.strip()

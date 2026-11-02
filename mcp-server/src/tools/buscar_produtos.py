@@ -42,7 +42,6 @@ def _catalog_unavailable_response(exc: DummyJsonError) -> dict[str, Any]:
             "O catálogo está indisponível no momento. "
             "Tente novamente em instantes."
         ),
-        "detail": exc.message,
         "products": [],
         "total": 0,
     }
@@ -90,7 +89,14 @@ async def execute_buscar_produtos(termo: str, client: DummyJsonClient) -> dict[s
             "total": 0,
         }
 
-    products = [map_product_fields(item) for item in products_raw if isinstance(item, dict)]
+    products = []
+    for item in products_raw:
+        if not isinstance(item, dict):
+            continue
+        try:
+            products.append(map_product_fields(item))
+        except DummyJsonInvalidResponseError:
+            continue
 
     total_raw = payload.get("total", len(products))
     try:

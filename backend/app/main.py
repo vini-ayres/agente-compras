@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.agent.agent import resolve_llm_config
 from app.agent.runner_factory import build_agent_runtime
 from app.api.requisicoes import router as requisicoes_router
 from app.config import Settings, get_settings
@@ -31,7 +32,13 @@ async def lifespan(app: FastAPI):
         app.state.agent_runtime = build_agent_runtime(settings)
     agent_runtime = app.state.agent_runtime
 
-    logger.info("Backend iniciado (app=%s model=%s)", settings.app_name, settings.llm_model)
+    llm = resolve_llm_config(settings)
+    logger.info(
+        "Backend iniciado (app=%s provider=%s model=%s)",
+        settings.app_name,
+        llm.provider,
+        llm.model,
+    )
     try:
         yield
     finally:

@@ -54,10 +54,13 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-agente_compras}
       MCP_SERVER_URL: http://mcp-server:8080/mcp
+      LLM_PROVIDER: ${LLM_PROVIDER:-gemini}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini/gemini-3.6-flash}
       LLM_MODEL: ${LLM_MODEL:-gemini/gemini-3.6-flash}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openrouter/google/gemini-3.6-flash}
+      LLM_MAX_OUTPUT_TOKENS: ${LLM_MAX_OUTPUT_TOKENS:-4096}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
       MCP_CONNECT_TIMEOUT_SECONDS: ${MCP_CONNECT_TIMEOUT_SECONDS:-10}
       MCP_SSE_READ_TIMEOUT_SECONDS: ${MCP_SSE_READ_TIMEOUT_SECONDS:-120}

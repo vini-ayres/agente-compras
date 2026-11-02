@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
@@ -14,12 +16,15 @@ from app.services.catalog_validation import (
     InvalidCatalogProductError,
     InvalidCatalogTitleError,
     ProductNotFoundError,
+    ProductNotInSearchError,
 )
 from app.services.requisicao_service import (
+    USER_CATALOG_UNAVAILABLE,
     AgentInvalidOutputError,
     AgentUnavailableError,
     BusinessRuleError,
     CatalogUnavailableBusinessError,
+    IdempotencyConflictError,
     InsufficientInfoError,
     NoProductsError,
     PersistenceError,
@@ -44,13 +49,28 @@ def get_requisicao_service(
     )
 
 
-@router.post("", response_model=RequisicaoOut, status_code=201)
+def _normalize_idempotency_key(raw: str | None) -> str | None:
+    if raw is None:
+        return None
+    key = raw.strip()
+    if not key:
+        return None
+    if len(key) > 128:
+        raise HTTPException(status_code=400, detail="Idempotency-Key inválida.")
+    return key
+
+
+@router.post("", response_model=RequisicaoOut)
 async def criar_requisicao(
     body: CriarRequisicaoRequest,
     service: RequisicaoService = Depends(get_requisicao_service),
-) -> RequisicaoOut:
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+) -> JSONResponse:
     try:
-        return await service.criar_requisicao(body)
+        outcome = await service.criar_requisicao(
+            body,
+            idempotency_key=_normalize_idempotency_key(idempotency_key),
+        )
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail="Pedido inválido.") from exc
     except NoProductsError as exc:
@@ -59,8 +79,12 @@ async def criar_requisicao(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ProductNotFoundError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ProductNotInSearchError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except (InvalidCatalogPriceError, InvalidCatalogTitleError, InvalidCatalogProductError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except IdempotencyConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except AgentInvalidOutputError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except AgentUnavailableError as exc:
@@ -68,11 +92,14 @@ async def criar_requisicao(
     except CatalogUnavailableBusinessError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except CatalogUnavailableError:
-        raise HTTPException(status_code=503, detail="Catálogo indisponível. Tente novamente em instantes.") from None
+        raise HTTPException(status_code=503, detail=USER_CATALOG_UNAVAILABLE) from None
     except BusinessRuleError as exc:
         raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
     except PersistenceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    status_code = 201 if outcome.created else 200
+    return JSONResponse(status_code=status_code, content=jsonable_encoder(outcome.requisicao))
 
 
 @router.get("", response_model=RequisicaoListResponse)
@@ -81,4 +108,7 @@ def listar_requisicoes(
     offset: int = Query(default=0, ge=0),
     service: RequisicaoService = Depends(get_requisicao_service),
 ) -> RequisicaoListResponse:
-    return service.listar(limit=limit, offset=offset)
+    try:
+        return service.listar(limit=limit, offset=offset)
+    except PersistenceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc

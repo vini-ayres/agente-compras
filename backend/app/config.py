@@ -17,17 +17,23 @@ class Settings(BaseSettings):
         default="postgresql+psycopg2://postgres:postgres@localhost:5432/agente_compras",
         alias="DATABASE_URL",
     )
+    llm_provider: str = Field(default="gemini", alias="LLM_PROVIDER")
     gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
+    gemini_model: str = Field(
+        default="gemini/gemini-3.6-flash",
+        alias="GEMINI_MODEL",
+    )
+    # Legado: usado pelo Gemini somente se GEMINI_MODEL estiver vazio.
     llm_model: str = Field(
         default="gemini/gemini-3.6-flash",
         alias="LLM_MODEL",
     )
-    # Preservados para compatibilidade de ambiente; o agente ativo usa Gemini.
     openrouter_api_key: str = Field(default="", alias="OPENROUTER_API_KEY")
     openrouter_model: str = Field(
-        default="openrouter/xingchen-agi/xing4.0-29b-a4b:free",
+        default="openrouter/google/gemini-3.6-flash",
         alias="OPENROUTER_MODEL",
     )
+    llm_max_output_tokens: int = Field(default=4096, ge=1, alias="LLM_MAX_OUTPUT_TOKENS")
     cors_origins: str = Field(
         default="http://localhost:5173,http://127.0.0.1:5173",
         alias="CORS_ORIGINS",

@@ -24,10 +24,12 @@ from app.schemas.requisicao import AgentItemSelection, AgentStructuredOutput
 def settings() -> Settings:
     return Settings(
         database_url="sqlite:///:memory:",
+        llm_provider="gemini",
         gemini_api_key="test-gemini-key",
+        gemini_model="gemini/gemini-3.6-flash",
         llm_model="gemini/gemini-3.6-flash",
         openrouter_api_key="legacy-openrouter-key",
-        openrouter_model="openrouter/xingchen-agi/xing4.0-29b-a4b:free",
+        openrouter_model="openrouter/google/gemini-3.6-flash",
         mcp_server_url="http://localhost:8080/mcp",
     )
 
@@ -79,6 +81,8 @@ def mock_agent_runtime() -> MagicMock:
                 ],
             ),
             raw_text="{}",
+            search_product_ids=frozenset({1, 7}),
+            search_observed=True,
         )
     )
     runtime.close = AsyncMock()

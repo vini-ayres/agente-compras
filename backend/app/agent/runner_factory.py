@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from google.adk.runners import Runner
 from google.adk.sessions.in_memory_session_service import InMemorySessionService
@@ -24,6 +24,7 @@ from google.genai import types
 from pydantic import ValidationError
 
 from app.agent.agent import create_mcp_toolset, create_root_agent
+from app.agent.search_ids import collect_search_ids
 from app.config import Settings
 from app.schemas.requisicao import AgentStructuredOutput
 
@@ -46,6 +47,8 @@ class AgentInvalidResponseError(Exception):
 class AgentRunResult:
     structured: AgentStructuredOutput
     raw_text: str
+    search_product_ids: frozenset[int] = field(default_factory=frozenset)
+    search_observed: bool = False
 
 
 class AgentRuntime:
@@ -90,12 +93,14 @@ class AgentRuntime:
         )
 
         final_text = ""
+        function_responses: list[object] = []
         try:
             async for event in self._runner.run_async(
                 user_id=user_id,
                 session_id=session_id,
                 new_message=message,
             ):
+                function_responses.extend(event.get_function_responses())
                 if not event.content:
                     continue
                 for part in event.content.parts or []:
@@ -108,6 +113,8 @@ class AgentRuntime:
             logger.exception("Falha ao executar agente ADK")
             raise AgentExecutionError("Falha ao executar o agente de compras.") from exc
 
+        search_product_ids, search_observed = collect_search_ids(function_responses)
+
         if not final_text.strip():
             raise AgentInvalidResponseError("Agente não retornou resposta final.")
 
@@ -117,7 +124,12 @@ class AgentRuntime:
             logger.warning("Resposta estruturada inválida do agente")
             raise AgentInvalidResponseError("Resposta do agente em formato inválido.") from exc
 
-        return AgentRunResult(structured=structured, raw_text=final_text)
+        return AgentRunResult(
+            structured=structured,
+            raw_text=final_text,
+            search_product_ids=search_product_ids,
+            search_observed=search_observed,
+        )
 
 
 def build_agent_runtime(settings: Settings) -> AgentRuntime:

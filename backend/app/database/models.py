@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -48,3 +48,24 @@ class RequisicaoItem(Base):
     subtotal: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
 
     requisicao: Mapped[Requisicao] = relationship(back_populates="itens")
+
+
+class IdempotencyRecord(Base):
+    """PostgreSQL-backed idempotency for POST /requisicoes."""
+
+    __tablename__ = "idempotency_keys"
+    __table_args__ = (UniqueConstraint("key", name="uq_idempotency_keys_key"),)
+
+    key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    requisicao_id: Mapped[int | None] = mapped_column(
+        ForeignKey("requisicoes.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )

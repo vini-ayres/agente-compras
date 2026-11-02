@@ -36,6 +36,13 @@ def _client_returning(payload: dict) -> MagicMock:
     return client
 
 
+def test_quantity_above_max_is_rejected() -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        _selection(quantidade=1001)
+
+
 @pytest.mark.asyncio
 async def test_price_valid() -> None:
     client = _client_returning(

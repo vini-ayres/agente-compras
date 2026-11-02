@@ -103,8 +103,42 @@ def test_post_invalid_catalog_price_returns_422(client) -> None:
     assert response.status_code == 422
 
 
+def test_get_requisicoes_persistence_failure_returns_503(client) -> None:
+    from sqlalchemy.exc import SQLAlchemyError
+
+    with patch(
+        "app.services.requisicao_service.RequisicaoRepository.list_requisicoes",
+        side_effect=SQLAlchemyError("db down"),
+    ):
+        response = client.get("/requisicoes")
+    assert response.status_code == 503
+    assert "consultar" in response.json()["detail"]
+
+
+def test_post_product_not_in_search_returns_422(client, mock_agent_runtime) -> None:
+    from app.agent.runner_factory import AgentRunResult
+    from app.schemas.requisicao import AgentItemSelection, AgentStructuredOutput
+
+    mock_agent_runtime.run_pedido = AsyncMock(
+        return_value=AgentRunResult(
+            structured=AgentStructuredOutput(
+                status="success",
+                resposta_agente="Item fora da busca.",
+                itens=[AgentItemSelection(produto_id=99, titulo="X", quantidade=1)],
+            ),
+            raw_text="{}",
+            search_product_ids=frozenset({7}),
+            search_observed=True,
+        )
+    )
+    response = client.post("/requisicoes", json={"pedido": "Preciso de notebooks"})
+    assert response.status_code == 422
+    assert "busca" in response.json()["detail"]
+
+
 def test_post_catalog_unavailable_returns_503(client) -> None:
     from app.services.catalog_validation import CatalogUnavailableError
+    from app.services.requisicao_service import USER_CATALOG_UNAVAILABLE
 
     with patch(
         "app.services.requisicao_service.validate_and_price_items",
@@ -112,3 +146,74 @@ def test_post_catalog_unavailable_returns_503(client) -> None:
     ):
         response = client.post("/requisicoes", json={"pedido": "Preciso de notebooks"})
     assert response.status_code == 503
+    assert response.json()["detail"] == USER_CATALOG_UNAVAILABLE
+
+
+def test_post_no_products_returns_controlled_message(client, mock_agent_runtime) -> None:
+    from app.agent.runner_factory import AgentRunResult
+    from app.schemas.requisicao import AgentStructuredOutput
+    from app.services.requisicao_service import USER_NO_PRODUCTS
+
+    mock_agent_runtime.run_pedido = AsyncMock(
+        return_value=AgentRunResult(
+            structured=AgentStructuredOutput(
+                status="no_products",
+                resposta_agente="Encontrei um Galaxy Fold 32 GB por US$ 1.00.",
+                itens=[],
+            ),
+            raw_text="{}",
+        )
+    )
+    response = client.post("/requisicoes", json={"pedido": "Preciso de um item raro"})
+    assert response.status_code == 422
+    assert response.json()["detail"] == USER_NO_PRODUCTS
+    assert "Galaxy" not in response.json()["detail"]
+    assert "1.00" not in response.json()["detail"]
+    assert client.get("/requisicoes").json()["total"] == 0
+
+
+def test_post_insufficient_info_returns_controlled_message(client, mock_agent_runtime) -> None:
+    from app.agent.runner_factory import AgentRunResult
+    from app.schemas.requisicao import AgentStructuredOutput
+    from app.services.requisicao_service import USER_INSUFFICIENT_INFO
+
+    mock_agent_runtime.run_pedido = AsyncMock(
+        return_value=AgentRunResult(
+            structured=AgentStructuredOutput(
+                status="insufficient_info",
+                resposta_agente="Peça 12 notebooks secretos a US$ 0.50.",
+                itens=[],
+            ),
+            raw_text="{}",
+        )
+    )
+    response = client.post("/requisicoes", json={"pedido": "quero"})
+    assert response.status_code == 422
+    assert response.json()["detail"] == USER_INSUFFICIENT_INFO
+    assert "notebooks secretos" not in response.json()["detail"]
+    assert client.get("/requisicoes").json()["total"] == 0
+
+
+def test_post_agent_catalog_unavailable_returns_controlled_message(
+    client, mock_agent_runtime
+) -> None:
+    from app.agent.runner_factory import AgentRunResult
+    from app.schemas.requisicao import AgentStructuredOutput
+    from app.services.requisicao_service import USER_CATALOG_UNAVAILABLE
+
+    mock_agent_runtime.run_pedido = AsyncMock(
+        return_value=AgentRunResult(
+            structured=AgentStructuredOutput(
+                status="catalog_unavailable",
+                resposta_agente="SQLAlchemy IntegrityError no host postgres.",
+                itens=[],
+            ),
+            raw_text="{}",
+        )
+    )
+    response = client.post("/requisicoes", json={"pedido": "Preciso de notebooks"})
+    assert response.status_code == 503
+    assert response.json()["detail"] == USER_CATALOG_UNAVAILABLE
+    assert "IntegrityError" not in response.json()["detail"]
+    assert "postgres" not in response.json()["detail"]
+    assert client.get("/requisicoes").json()["total"] == 0
